@@ -1,0 +1,86 @@
+# ---
+# Main intents
+# ---
+
+# That's when a user asks about a specific characteristic of a product
+AskAbout
+    {Greeting}? {Need}? {Not}! {Know} {Product}[p] {Characteristic}[c;c.product=p]?.
+    {Greeting}? {Need}? {Not}! {Know} {Characteristic}[c;c.product=p]? {Product}[p].
+    {Greeting}? {Need}? {Not}! {Know} {Action}[a] {Characteristic}[c;c.product=a.product]?.
+
+# That's how the user might ask a question looking for product offers
+Statement
+    {Greeting}? {Description}* {Question} {Description}*.
+
+# If the user asks for a quotation
+Quotation
+    {Greeting}? {Description}* {Subject} ({Want}|{Need}) {Know}? {MakeQuotation} {Description}*.
+
+# ---
+# Inside
+# ---
+
+Greeting
+    bonjour
+    salut
+    hello
+
+Description
+    {Subject}? {Has} {Already}? {Product}
+
+Subject
+    je
+    nous
+
+Has
+    {stem:avoir}
+    {stem:posséder}
+
+Already
+    déjà
+
+Product
+    (une?~)?{lookup(name,intent):type=product}
+    solution !!0.5
+
+Characteristic
+    {lookup(name,intent):type=characteristic}
+
+Question
+    (({Subject}? {Wants} {Not}!)? {Can})? {Product}[p] {Characteristic}[c;c.product=p]
+    {Subject}? {Wants}? {Not}! {Information} {Product}
+
+Information
+    information
+    brochure
+    plaquette
+    guide
+
+Wants
+    {stem:vouloir}
+    {stem:chercher}
+    {stem:souhaiter}
+
+Can
+    {stem:pouvoir}
+
+Need
+    besoin
+    faut
+    {stem:aimer}
+
+Know
+    {stem:valider}
+    {stem:savoir}
+
+MakeQuotation
+    (un~)?devis
+    (une~)?estimation
+    (le~)?tarif
+    (le~)?prix
+
+Not
+    pas
+
+Action
+    {lookup(intent}:type=action}
