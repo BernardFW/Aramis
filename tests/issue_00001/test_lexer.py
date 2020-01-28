@@ -1,10 +1,15 @@
-from aramis.lexer import Lexer, Token, Neighbor
+from pytest import fixture
+
+from aramis.lexer import Lexer, Token, Neighbor, OptionType
 from aramis.langs import fr_FR
 
 
-def test_normalize_fr_fr():
-    lex = Lexer(fr_FR)
+@fixture(name="lex")
+def make_lex():
+    return Lexer(fr_FR)
 
+
+def test_normalize_fr_fr(lex):
     assert (
         lex.normalize("J'ai perdu mes codes d'acc à mon site")
         == "J’ai perdu mes codes d’acc à mon site"
@@ -81,15 +86,11 @@ def test_normalize_fr_fr():
     assert lex.normalize("vetements 100 % basques.") == "vetements 100% basques ."
 
 
-def test_tokenize():
-    lex = Lexer(fr_FR)
-
+def test_tokenize(lex):
     assert [x.word for x in lex.tokenize("Accès refusé !")] == ["Accès", "refusé", "!"]
 
 
-def test_explore():
-    lex = Lexer(fr_FR)
-
+def test_explore(lex):
     b: Token
     (b,) = lex.tokenize("bonjour", explore=True)
 
@@ -102,3 +103,15 @@ def test_explore():
         Neighbor(["bon", "jour"], 0.5454545454545454),
         Neighbor(["bon-jour"], 0.5454545454545454),
     ]
+
+
+def test_options(lex):
+    (a,) = lex.process("anticonstitutionnellement")
+
+    option = a.options[0]
+
+    assert option.type == OptionType.verbatim
+    assert option.score == 1.0
+    assert option.token.word == "anticonstitutionnellement"
+    assert len(option.words) == 1
+    assert option.words[0].word == "anticonstitutionnellement"

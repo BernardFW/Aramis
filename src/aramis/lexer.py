@@ -1,12 +1,15 @@
-from concurrent.futures.thread import ThreadPoolExecutor
+from collections import deque
+from dataclasses import InitVar, dataclass, field
+from enum import Enum
+from itertools import chain
 from os import getenv
-from typing import NamedTuple, Optional, Sequence, Text
+from typing import NamedTuple, Optional, Sequence, Text, Tuple
 
 from hunspell import Hunspell
-from psutil import cpu_count
 
 from .langs import Lang
 from .trigram import Trigram
+from .weights import Weights
 
 
 class Neighbor(NamedTuple):
@@ -29,9 +32,16 @@ class Token:
         self.word = word
         self.neighbors: Optional[Sequence[Neighbor]] = None
         self.stems: Optional[Sequence[Text]] = None
+        self._options: Optional[Sequence["Option"]] = None
 
     def __repr__(self):
-        return f'Token({self.word!r})'
+        return f"Token({self.word!r})"
+
+    def __eq__(self, other):
+        return self is other
+
+    def __hash__(self):
+        return hash(self.word)
 
     @property
     def is_word(self) -> bool:
@@ -41,6 +51,87 @@ class Token:
         """
 
         return bool(self.lexer.lang.get_word_re().match(self.word))
+
+    @property
+    def weights(self) -> Weights:
+        """
+        Shortcut to access the weight constants
+        """
+
+        return self.lexer.weights
+
+    @property
+    def options(self) -> Sequence["Option"]:
+        """
+        Generates a list of options for the current token. It's a list of all
+        the words that the spellchecking things that are likely to be this
+        word, including the original word itself.
+
+        The first option of the returned sequence is the most likely to be the
+        right one, followed by decreasingly likely options.
+        """
+
+        if self._options is None:
+            self._options = self._make_options()
+
+        return self._options
+
+    def _make_options_verbatim(self) -> Sequence["Option"]:
+        """
+        The word itself, verbatim
+        """
+
+        return [
+            Option(
+                OptionType.verbatim, self.weights.option_verbatim, self, (self.word,)
+            )
+        ]
+
+    def _make_options_stem(self) -> Sequence["Option"]:
+        """
+        Options that are stems of the word ("words" -> "word",
+        "doing" -> "to do", etc).
+        """
+
+        out = deque()
+
+        for stem in self.stems or []:
+            option = Option(OptionType.stem, self.weights.option_stem, self, (stem,))
+            out.append(option)
+
+        return out
+
+    def _make_options_neighbors(self) -> Sequence["Option"]:
+        """
+        Options of words with a similar spelling
+        """
+
+        out = deque()
+
+        for neighbor in self.neighbors or []:
+            option = Option(
+                OptionType.neighbor, neighbor.sim, self, tuple(neighbor.words)
+            )
+            out.append(option)
+
+        return out
+
+    def _make_options(self) -> Sequence["Option"]:
+        """
+        Combines together all kinds of options and returns them.
+        """
+
+        return [
+            *sorted(
+                chain(
+                    self._make_options_verbatim(),
+                    self._make_options_stem(),
+                    self._make_options_neighbors(),
+                ),
+                key=lambda o: o.score,
+                reverse=True,
+            )
+        ]
 
     def explore(self) -> None:
         """
@@ -67,6 +158,61 @@ class Token:
         self.stems.extend(self.lexer.hunspell.stem(self.word))
 
 
+class OptionType(Enum):
+    """
+    Represents the type of option generated, in case you want to filter which
+    options are interesting for you.
+    """
+
+    # The word verbatim
+    verbatim = "verbatim"
+
+    # A word with a neighbor writing
+    neighbor = "neighbor"
+
+    # A possible stem for this word
+    stem = "stem"
+
+
+@dataclass(frozen=True)
+class Option:
+    """
+    An option is one of possible options that are derived from a token. Each
+    option consists of one or several words. By example it could be someone
+    that said "helo" which is being fixed to "hello", or it could be a
+    "hithere" which is being split into "hi there".
+    """
+
+    type: OptionType
+    score: float
+    token: "Token"
+    raw_words: InitVar[Tuple[Text, ...]]
+    words: Tuple["OptionWord"] = field(init=False)
+
+    def __post_init__(self, raw_words: Tuple[Text, ...]):
+        object.__setattr__(
+            self, "words", tuple(OptionWord(self, word) for word in raw_words)
+        )
+
+
+@dataclass(frozen=True)
+class OptionWord:
+    """
+    A word part of an option
+
+    See Also
+    --------
+    The Option class right above
+    """
+
+    option: Option = field(hash=False)
+    word: Text
+    word_lower: Text = field(init=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "word_lower", self.word.lower())
+
+
 class Lexer:
     """
     Lexing the content, aka transforming texts into a series of tokens that are
@@ -91,10 +237,10 @@ class Lexer:
     of the current lang (makes sense I guess).
     """
 
-    def __init__(self, lang: Lang, max_pool_size: int = cpu_count(logical=False) + 1):
+    def __init__(self, lang: Lang, weights: Weights = Weights()):
         self.lang = lang
+        self.weights = weights
         self._hunspell = None
-        self._pool = ThreadPoolExecutor(max_pool_size)
 
     @property
     def hunspell_data_dir(self):
