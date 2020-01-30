@@ -45,6 +45,81 @@ class Parser:
         self.rules = {i.name: i for i in rules}
         self.weights = weights
 
+    def _make_nominations(
+        self, tokens: Sequence[Token]
+    ) -> Dict[Token, Dict[Option, Dict[OptionWord, List[Nomination]]]]:
+        """
+        Runs all the tokens through the rules in order to extract the
+        nominations indexed in a dictionary that allows to find the nominations
+        by token/option/word.
+
+        Parameters
+        ----------
+        tokens
+            List of the tokens you want to analyze
+
+        Returns
+        -------
+        Indexed tokens
+        """
+
+        words = [w for t in tokens for o in t.options for w in o.words]
+        nominations: Dict[
+            Token, Dict[Option, Dict[OptionWord, List[Nomination]]]
+        ] = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [])))
+
+        for rw in self.rules.values():
+            nom: Nomination
+            for nom in rw.rule.nominate_words(words):
+                nominations[nom.word.option.token][nom.word.option][nom.word].append(
+                    nom
+                )
+
+        return nominations
+
+    def _order_nominations(
+        self,
+        nominations: Dict[Token, Dict[Option, Dict[OptionWord, List[Nomination]]]],
+        out: deque,
+        tokens: Sequence[Token],
+    ) -> None:
+        """
+        Given the generated nominations list and tokens sequence, generates
+        for each token the different nomination sequences to be considered.
+
+        Parameters
+        ----------
+        nominations
+            Indexed nominations
+        out
+            Output list to be filled. Each new row corresponds to a given
+            token.
+        tokens
+            List of tokens for which the nomination options have to be
+            generated
+        """
+
+        for token in tokens:
+            token_nom = deque()
+
+            for option in token.options:
+                word_nom: List[List[WordMatch]] = [[NoMatch()]] * len(option.words)
+
+                for i, word in enumerate(option.words):
+                    word_nom[i].extend(nominations[token][option][word])
+
+                token_nom.extend(
+                    p
+                    for p in product(*word_nom)
+                    if not all(isinstance(w, NoMatch) for w in p)
+                )
+
+            out.append(
+                Interpretation(
+                    token=token, nominations=tuple(tuple(x) for x in token_nom)
+                )
+            )
+
     def nominate(self, tokens: Sequence[Token]) -> Sequence[Interpretation]:
         """
         Provided a list of tokens, ask the rules to nominate each word that
@@ -71,39 +146,8 @@ class Parser:
         All the nominations for the provided tokens
         """
 
-        words = [w for t in tokens for o in t.options for w in o.words]
-        nominations: Dict[
-            Token, Dict[Option, Dict[OptionWord, List[Nomination]]]
-        ] = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [])))
-
-        for rw in self.rules.values():
-            nom: Nomination
-            for nom in rw.rule.nominate_words(words):
-                nominations[nom.word.option.token][nom.word.option][nom.word].append(
-                    nom
-                )
-
         out = deque()
-
-        for token in tokens:
-            token_nom = deque()
-
-            for option in token.options:
-                word_nom: List[List[WordMatch]] = [[NoMatch()]] * len(option.words)
-
-                for i, word in enumerate(option.words):
-                    word_nom[i].extend(nominations[token][option][word])
-
-                token_nom.extend(
-                    p
-                    for p in product(*word_nom)
-                    if not all(isinstance(w, NoMatch) for w in p)
-                )
-
-            out.append(
-                Interpretation(
-                    token=token, nominations=tuple(tuple(x) for x in token_nom)
-                )
-            )
+        nominations = self._make_nominations(tokens)
+        self._order_nominations(nominations, out, tokens)
 
         return tuple(out)
