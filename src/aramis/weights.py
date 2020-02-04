@@ -7,3 +7,5 @@ class Weights:
 
     option_verbatim = 1.0
     option_stem = 0.95
+
+    rule_miss_penalty = 100

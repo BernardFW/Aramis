@@ -3,7 +3,7 @@ from dataclasses import InitVar, dataclass, field
 from enum import Enum
 from itertools import chain
 from os import getenv
-from typing import NamedTuple, Optional, Sequence, Text, Tuple
+from typing import Iterator, NamedTuple, Optional, Sequence, Text, Tuple
 
 from hunspell import Hunspell
 
@@ -76,45 +76,31 @@ class Token:
 
         return self._options
 
-    def _make_options_verbatim(self) -> Sequence["Option"]:
+    def _make_options_verbatim(self) -> Iterator["Option"]:
         """
         The word itself, verbatim
         """
 
-        return [
-            Option(
-                OptionType.verbatim, self.weights.option_verbatim, self, (self.word,)
-            )
-        ]
+        yield Option(
+            OptionType.verbatim, self.weights.option_verbatim, self, (self.word,)
+        )
 
-    def _make_options_stem(self) -> Sequence["Option"]:
+    def _make_options_stem(self) -> Iterator["Option"]:
         """
         Options that are stems of the word ("words" -> "word",
         "doing" -> "to do", etc).
         """
 
-        out = deque()
-
         for stem in self.stems or []:
-            option = Option(OptionType.stem, self.weights.option_stem, self, (stem,))
-            out.append(option)
+            yield Option(OptionType.stem, self.weights.option_stem, self, (stem,))
 
-        return out
-
-    def _make_options_neighbors(self) -> Sequence["Option"]:
+    def _make_options_neighbors(self) -> Iterator["Option"]:
         """
         Options of words with a similar spelling
         """
 
-        out = deque()
-
         for neighbor in self.neighbors or []:
-            option = Option(
-                OptionType.neighbor, neighbor.sim, self, tuple(neighbor.words)
-            )
-            out.append(option)
-
-        return out
+            yield Option(OptionType.neighbor, neighbor.sim, self, tuple(neighbor.words))
 
     def _make_options(self) -> Sequence["Option"]:
         """

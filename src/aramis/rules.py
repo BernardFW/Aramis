@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Optional, Sequence, Text
+from typing import Any, Iterator, Optional, Sequence, Text, Union
 
 from .lexer import OptionType, OptionWord
 
@@ -47,6 +47,18 @@ class Nomination:
     flag: Flag
 
 
+class NoMatch:
+    """
+    Special object to indicate the lack of match
+    """
+
+    def __repr__(self):
+        return "NoMatch()"
+
+
+WordMatch = Union[NoMatch, Nomination]
+
+
 @dataclass(eq=False, frozen=True)
 class WordMatcher:
     """
@@ -62,6 +74,9 @@ class WordMatcher:
     stem: bool = False
 
     def __eq__(self, other):
+        if isinstance(other, Nomination):
+            other = other.word
+
         if not isinstance(other, OptionWord):
             return False
 
@@ -108,7 +123,7 @@ class Rule(ABC):
         return []
 
     @abstractmethod
-    def evaluate(self, words: Sequence[Nomination]) -> Optional[float]:
+    def evaluate(self, words: Sequence[WordMatch]) -> Optional[float]:
         """
         Evaluates a sequence of words in and determines a score of how much
         the rule is respected. The lower the better.
@@ -164,5 +179,93 @@ class SausageRule(Rule):
             if word in allowed:
                 yield Nomination(word=word, flag=Flag(self))
 
-    def evaluate(self, words: Sequence[OptionWord]) -> Optional[float]:
-        raise NotImplementedError
+    def evaluate(self, words: Sequence[WordMatch]) -> Optional[float]:
+        """
+        Makes sure that our two keywords are found in order in the sentence.
+        The closest they are the better the match.
+
+        Parameters
+        ----------
+        words
+            Sequence of words to evaluate
+
+        Returns
+        -------
+        Returns a score of likeliness if the sentence makes sense, nothing
+        otherwise.
+        """
+
+        like_pos = None
+        sausage_pos = None
+
+        like = WordMatcher("aimer", stem=True)
+        sausage = WordMatcher("saucisse", stem=True)
+
+        for i, word in enumerate(words):
+            if like == word:
+                if like_pos is not None:
+                    return
+
+                like_pos = i
+
+            if sausage == word:
+                if sausage_pos is not None:
+                    return
+
+                sausage_pos = i
+
+        if like_pos is None or sausage_pos is None:
+            return
+
+        diff = sausage_pos - like_pos
+
+        if diff < 0:
+            return
+        elif 1 <= diff <= 2:
+            return 0
+        elif diff == 3:
+            return 0.25
+        elif diff == 4:
+            return 0.5
+        else:
+            return 1.0
+
+
+class MaximizeMatch(Rule):
+    """
+    The goal here is to maximize the amount of matched words. We should make
+    sure that as many words as possible are matched and take the decision to
+    ignore words only if this unlocks significant grammatical sense.
+    """
+
+    def evaluate(self, words: Sequence[WordMatch]) -> Optional[float]:
+        total = len(words)
+        matching = 0
+
+        for word in words:
+            if not isinstance(word, NoMatch):
+                matching += 1
+
+        return 1.0 - float(matching) / float(total)
+
+
+class MaximizeSimilarity(Rule):
+    """
+    Maximizes the similarity of matched words. If two words are in competition
+    then use the one that is spelled the closest to what the user wrote.
+    """
+
+    def evaluate(self, words: Sequence[WordMatch]) -> Optional[float]:
+        total = 0
+        cnt = 0
+
+        for word in words:
+            if isinstance(word, Nomination):
+                # noinspection PyUnresolvedReferences
+                total += 1 - word.word.option.score
+                cnt += 1
+
+        if cnt == 0:
+            return None
+
+        return float(total) / float(cnt)
