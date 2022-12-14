@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aramis"
-version = "0.1.0"
+version = "0.1.0+a1"
 description = "Another NLP engine"
 authors = ["Rémy Sanchez <remy.sanchez@hyperthese.net>"]
 license = "AGPL-3.0-only"
