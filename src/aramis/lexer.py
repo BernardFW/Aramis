@@ -5,11 +5,36 @@ from itertools import chain
 from os import getenv
 from typing import NamedTuple, Optional, Sequence, Text, Tuple
 
-from hunspell import Hunspell
+from hunspell_cffi import Hunspell, lib, ffi
 
 from .langs import Lang
 from .trigram import Trigram
 from .weights import Weights
+
+
+class Hunspell2(Hunspell):
+    """
+    We had to override Hunspell-CFFI because they didn't implement stem()
+    """
+
+    def stem(self, word: str) -> Sequence[str]:
+        """
+        "De-conjugate" words
+        """
+
+        if not isinstance(word, str):
+            raise ValueError("Expected a string")
+
+        sl = ffi.new("char***")
+        n = lib.Hunspell_stem(self.hun, sl, word.encode("utf-8"))
+
+        try:
+            if not n:
+                return []
+
+            return [ffi.string(sl[0][i]).decode("utf-8") for i in range(n)]
+        finally:
+            lib.Hunspell_free_list(self.hun, sl, n)
 
 
 class Neighbor(NamedTuple):
@@ -257,9 +282,9 @@ class Lexer:
         """
 
         if not self._hunspell:
-            self._hunspell = Hunspell(
-                self.lang.get_hunspell_dict_name(),
-                hunspell_data_dir=self.hunspell_data_dir,
+            self._hunspell = Hunspell2(
+                path=self.hunspell_data_dir,
+                language=self.lang.get_hunspell_dict_name(),
             )
 
         return self._hunspell
