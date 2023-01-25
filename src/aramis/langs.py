@@ -45,7 +45,10 @@ class Locale(NamedTuple):
         if not m:
             raise ValueError("Provided value is not a valid locale")
 
-        return Locale(lang=m.group(1).lower(), region=m.group(2).lower(),)
+        return Locale(
+            lang=m.group(1).lower(),
+            region=m.group(2).lower(),
+        )
 
 
 class Lang(ABC):

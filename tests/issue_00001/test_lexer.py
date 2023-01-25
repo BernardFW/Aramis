@@ -1,7 +1,7 @@
 from pytest import fixture
 
-from aramis.lexer import Lexer, Token, Neighbor, OptionType
 from aramis.langs import fr_FR
+from aramis.lexer import Lexer, Neighbor, OptionType, Token
 
 
 @fixture(name="lex")

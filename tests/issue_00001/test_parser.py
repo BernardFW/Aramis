@@ -1,8 +1,8 @@
 from pytest import fixture
 
-from aramis.lexer import Lexer, Token, Neighbor, OptionType
 from aramis.langs import fr_FR
-from aramis.parser import Parser, Interpretation
+from aramis.lexer import Lexer, Neighbor, OptionType, Token
+from aramis.parser import Interpretation, Parser
 from aramis.rules import SausageRule, WordMatcher
 
 
