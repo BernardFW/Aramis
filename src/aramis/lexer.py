@@ -249,7 +249,7 @@ class Lexer:
         return getenv("HUNSPELL_DATA_DIR", "/usr/share/hunspell")
 
     @property
-    def hunspell(self) -> Hunspell:
+    def hunspell(self) -> "Hunspell":
         """
         Returns the (cached) Hunspell instance
         """
